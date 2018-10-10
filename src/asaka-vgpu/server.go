@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -232,31 +230,22 @@ func (m *AsakaVgpuDevicePlugin) Serve() error {
 }
 
 func (m *AsakaVgpuDevicePlugin) handleHttpResponse(queryType string, queryUrl string) ([]AsakaServer, bool, error) {
-	var asakaServers []AsakaServer
-	response, err := http.Get(queryUrl)
+	returnStr, err := handleHttpGet(queryUrl)
 	if err != nil {
 		log.Info(err)
 		return nil, false, err
 	}
 
-	defer response.Body.Close()
-	if response.StatusCode > 299 {
-		errorMessage := fmt.Sprintf("Unexpected response codes: %d", response.StatusCode)
-		return nil, false, errors.New(errorMessage)
-	}
-
-	body, _ := ioutil.ReadAll(response.Body)
-	return_str := string(body)
-
-	if return_str == "null" {
+	if returnStr == "null" {
 		return nil, false, errors.New("Not enough asaka vGPU left. Please wait")
 	}
 
-	err = json.Unmarshal([]byte(return_str), &asakaServers)
+	var asakaServers []AsakaServer
+	err = json.Unmarshal([]byte(returnStr), &asakaServers)
 
 	if err != nil {
 		var asakaError AsakaError
-		err := json.Unmarshal([]byte(return_str), &asakaError)
+		err := json.Unmarshal([]byte(returnStr), &asakaError)
 		return nil, true, err
 	}
 
@@ -265,20 +254,20 @@ func (m *AsakaVgpuDevicePlugin) handleHttpResponse(queryType string, queryUrl st
 
 func (m *AsakaVgpuDevicePlugin) queryVGPUAllocations(allocationId string) string {
 	queryStr := fmt.Sprintf("http://%s/device/%s", xaasControllerUri, allocationId)
-	reStr, err := handleHttpGet(queryStr)
+	returnStr, err := handleHttpGet(queryStr)
 	if err != nil {
 		log.Info("Query allocation error: ", err)
 	}
-	return reStr
+	return returnStr
 }
 
 func (m *AsakaVgpuDevicePlugin) confirmedVGPUAllocations(allocationId string) string {
 	url := fmt.Sprintf("http://%s/device/%s/allocate", xaasControllerUri, allocationId)
-	reStr, err := handleHttpPut(url, "")
+	returnStr, err := handleHttpPut(url, "")
 
 	if err != nil {
 		log.Infof("Confirm allocation %s error: %s", allocationId, err)
 	}
 
-	return reStr
+	return returnStr
 }

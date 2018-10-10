@@ -20,16 +20,18 @@ func handleHttpGet(queryUrl string) (string, error) {
 		return "", err
 	}
 
-	defer response.Body.Close()
 	if response.StatusCode > 299 {
 		errorMessage := fmt.Sprintf("Unexpected response codes: %d", response.StatusCode)
 		return "", errors.New(errorMessage)
 	}
 
-	body, _ := ioutil.ReadAll(response.Body)
-	return_str := string(body)
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
 
-	return return_str, nil
+	return string(body), nil
 }
 
 func handleHttpPut(url string, data string) (string, error) {
@@ -38,52 +40,49 @@ func handleHttpPut(url string, data string) (string, error) {
 	response, err := client.Do(request)
 	if err != nil {
 		return "", err
-	} else {
-		defer response.Body.Close()
-		contents, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			return "", err
-		}
-
-		return string(contents[:]), nil
 	}
+
+	defer response.Body.Close()
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(body), nil
 }
 
 func getDevices() []*pluginapi.Device {
-	var devs []*pluginapi.Device
-
-	url := fmt.Sprintf("http://%s/device", xaasControllerUri)
-	response, err := http.Get(url)
+	queryUrl := fmt.Sprintf("http://%s/device", xaasControllerUri)
+	returnStr, err := handleHttpGet(queryUrl)
 	if err != nil {
-		log.Info(err)
-	} else if response.StatusCode > 299 {
-		log.Infof("Unexpected response code: %d", response.StatusCode)
-	} else {
-		body, _ := ioutil.ReadAll(response.Body)
-		defer response.Body.Close()
+		log.Error(err)
+		return nil
+	}
 
-		var devices []Device
-		err = json.Unmarshal(body, &devices)
-		if err == nil {
-			for _, d := range devices {
-				vgpuNum := 0
-				for _, extra := range d.ExtraAttrs {
-					if extra.Key == "vgpu_num" {
-						if vgpuNum, err = strconv.Atoi(extra.Value); err != nil {
-							log.Errorln(err)
-						}
-						break
-					}
+	var devices []Device
+	if err = json.Unmarshal([]byte(returnStr), &devices); err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	var devs []*pluginapi.Device
+	for _, d := range devices {
+		vgpuNum := 0
+		for _, extra := range d.ExtraAttrs {
+			if extra.Key == "vgpu_num" {
+				if vgpuNum, err = strconv.Atoi(extra.Value); err != nil {
+					log.Error(err)
 				}
-				for i := 0; i < vgpuNum; i++ {
-					vgpuID := d.DeviceId + ":" + strconv.Itoa(i)
-					log.Debug("vgpuID: ", vgpuID)
-					devs = append(devs, &pluginapi.Device{
-						ID:     vgpuID,
-						Health: pluginapi.Healthy,
-					})
-				}
+				break
 			}
+		}
+		for i := 0; i < vgpuNum; i++ {
+			vgpuID := d.DeviceId + ":" + strconv.Itoa(i)
+			log.Debug("vgpuID: ", vgpuID)
+			devs = append(devs, &pluginapi.Device{
+				ID:     vgpuID,
+				Health: pluginapi.Healthy,
+			})
 		}
 	}
 
