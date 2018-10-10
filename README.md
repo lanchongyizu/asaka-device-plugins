@@ -17,5 +17,5 @@ GOPATH=`pwd` make compile
 ## How to Run
 
 ```bash
-XAAS_CONTROLLER_URI=127.0.0.1:9527 bin/asaka-vgpu
+LOG_LEVEL=info XAAS_CONTROLLER_URI=127.0.0.1:9527 bin/asaka-vgpu
 ```

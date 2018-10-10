@@ -17,7 +17,7 @@ import (
 func handleHttpGet(queryUrl string) (string, error) {
 	response, err := http.Get(queryUrl)
 	if err != nil {
-		log.Infof(err.Error())
+		log.Info(err)
 		return "", err
 	}
 
@@ -38,13 +38,13 @@ func handleHttpPut(url string, data string) (string, error) {
 	request, err := http.NewRequest("PUT", url, strings.NewReader(data))
 	response, err := client.Do(request)
 	if err != nil {
-		log.Infof(err.Error())
+		log.Info(err)
 		return "", err
 	} else {
 		defer response.Body.Close()
 		contents, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			log.Infof(err.Error())
+			log.Info(err)
 			return "", err
 		}
 
@@ -58,7 +58,7 @@ func getDevices() []*pluginapi.Device {
 	url := fmt.Sprintf("http://%s/device", xaasControllerUri)
 	response, err := http.Get(url)
 	if err != nil {
-		log.Infof(err.Error())
+		log.Info(err)
 	} else if response.StatusCode > 299 {
 		log.Infof("Unexpected response code: %d", response.StatusCode)
 	} else {
@@ -80,7 +80,7 @@ func getDevices() []*pluginapi.Device {
 				}
 				for i := 0; i < vgpuNum; i++ {
 					vgpuID := d.DeviceId + ":" + strconv.Itoa(i)
-					log.Info("vgpuID: ", vgpuID)
+					log.Debug("vgpuID: ", vgpuID)
 					devs = append(devs, &pluginapi.Device{
 						ID:     vgpuID,
 						Health: pluginapi.Healthy,

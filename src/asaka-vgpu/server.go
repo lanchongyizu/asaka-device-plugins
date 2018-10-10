@@ -161,10 +161,10 @@ func (m *AsakaVgpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 			asakaServers, isDone, errorOfHandleResponse := m.handleHttpResponse(cudaRequestType, queryUrl)
 
 			if errorOfHandleResponse != nil {
-				log.Infof("Error of handle response: ", errorOfHandleResponse)
+				log.Info("Error of handle response: ", errorOfHandleResponse)
 				return nil, errorOfHandleResponse
 			} else if !isDone {
-				log.Infof("Error of handle response: ", errorOfHandleResponse)
+				log.Info("Error of handle response: ", errorOfHandleResponse)
 				return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
 			} else if len(asakaServers) == 0 {
 				log.Infof("Cannot find enough vGPUs meet the requirment: %d.", vgpuNeeded)
@@ -185,7 +185,7 @@ func (m *AsakaVgpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 				}
 
 				stringEnv, _ := json.Marshal(envMap)
-				log.Infof("Set the env for the container: ", string(stringEnv))
+				log.Info("Set the env for the container: ", string(stringEnv))
 			}
 		}
 
@@ -218,7 +218,7 @@ func (m *AsakaVgpuDevicePlugin) Serve() error {
 		log.Infof("Could not start device plugin: %s", err)
 		return err
 	}
-	log.Infoln("Starting to serve on", m.socket)
+	log.Info("Starting to serve on ", m.socket)
 
 	err = m.Register(pluginapi.KubeletSocket, resourceName)
 	if err != nil {
@@ -226,7 +226,7 @@ func (m *AsakaVgpuDevicePlugin) Serve() error {
 		m.Stop()
 		return err
 	}
-	log.Infoln("Registered device plugin with Kubelet")
+	log.Info("Registered device plugin with Kubelet")
 
 	return nil
 }
@@ -235,7 +235,7 @@ func (m *AsakaVgpuDevicePlugin) handleHttpResponse(queryType string, queryUrl st
 	var asakaServers []AsakaServer
 	response, err := http.Get(queryUrl)
 	if err != nil {
-		log.Infof(err.Error())
+		log.Info(err)
 		return nil, false, err
 	}
 
@@ -267,7 +267,7 @@ func (m *AsakaVgpuDevicePlugin) queryVGPUAllocations(allocationId string) string
 	queryStr := fmt.Sprintf("http://%s/device/%s", xaasControllerUri, allocationId)
 	reStr, err := handleHttpGet(queryStr)
 	if err != nil {
-		log.Infof("Query allocation error:", err)
+		log.Info("Query allocation error: ", err)
 	}
 	return reStr
 }
