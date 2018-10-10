@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 
@@ -14,11 +15,8 @@ type releaseInfo struct {
 	allocationStr string
 }
 
-var (
-	xaasControllerUri = os.Getenv("XAAS_CONTROLLER_URI")
-)
-
 var releaseMap map[string]releaseInfo
+var xaasControllerUri string
 
 func initLogger() {
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -38,8 +36,21 @@ func initLogger() {
 	log.SetOutput(os.Stdout)
 }
 
+func initControllerUri() {
+	xaasControllerUri = os.Getenv("XAAS_CONTROLLER_URI")
+	if xaasControllerUri == "" {
+		log.Fatal("XAAS_CONTROLLER_URI can't be empty.")
+	}
+
+	queryStr := fmt.Sprintf("http://%s/test", xaasControllerUri)
+	if _, err := handleHttpGet(queryStr); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func init() {
 	initLogger()
+	initControllerUri()
 }
 
 func main() {

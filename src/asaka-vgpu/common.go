@@ -17,7 +17,6 @@ import (
 func handleHttpGet(queryUrl string) (string, error) {
 	response, err := http.Get(queryUrl)
 	if err != nil {
-		log.Info(err)
 		return "", err
 	}
 
@@ -38,13 +37,11 @@ func handleHttpPut(url string, data string) (string, error) {
 	request, err := http.NewRequest("PUT", url, strings.NewReader(data))
 	response, err := client.Do(request)
 	if err != nil {
-		log.Info(err)
 		return "", err
 	} else {
 		defer response.Body.Close()
 		contents, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			log.Info(err)
 			return "", err
 		}
 
