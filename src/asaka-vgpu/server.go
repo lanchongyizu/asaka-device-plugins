@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net"
 	"os"
 	"path"
@@ -24,18 +22,14 @@ const (
 
 // AsakaVgpuDevicePlugin implements the Kubernetes device plugin API
 type AsakaVgpuDevicePlugin struct {
-	devs   []*pluginapi.Device
 	socket string
-
-	stop chan interface{}
-
+	stop   chan interface{}
 	server *grpc.Server
 }
 
 // NewAsakaVgpuDevicePlugin returns an initialized AsakaVgpuDevicePlugin
 func NewAsakaVgpuDevicePlugin() *AsakaVgpuDevicePlugin {
 	return &AsakaVgpuDevicePlugin{
-		devs:   getDevices(),
 		socket: serverSock,
 
 		stop: make(chan interface{}),
@@ -126,15 +120,16 @@ func (m *AsakaVgpuDevicePlugin) Register(kubeletEndpoint, resourceName string) e
 
 // ListAndWatch lists devices and update that list per second
 func (m *AsakaVgpuDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+	devs := asakaControllerClient.GetDevices()
+	s.Send(&pluginapi.ListAndWatchResponse{Devices: devs})
 
 	for {
 		select {
 		case <-m.stop:
 			return nil
 		case <-time.After(time.Second):
-			m.devs = getDevices()
-			s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+			devs = asakaControllerClient.GetDevices()
+			s.Send(&pluginapi.ListAndWatchResponse{Devices: devs})
 		}
 	}
 }
@@ -148,7 +143,7 @@ func (m *AsakaVgpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 		log.Infof("Request %d VGPUs.", vgpuNeeded)
 		if vgpuNeeded > 0 {
 			var err error
-			envMap, err = m.allocateVGPU(vgpuNeeded)
+			envMap, err = asakaControllerClient.AllocateVGPU(vgpuNeeded)
 			if err != nil {
 				return nil, err
 			}
@@ -196,83 +191,4 @@ func (m *AsakaVgpuDevicePlugin) Serve() error {
 	log.Info("Registered device plugin with Kubelet")
 
 	return nil
-}
-
-func (m *AsakaVgpuDevicePlugin) allocateVGPU(vgpuNeeded int) (map[string]string, error) {
-	queryUrl := fmt.Sprintf("http://%s/service/asaka_server?served_protocol=CUDA&vgpu_request=%d", xaasControllerUri, vgpuNeeded)
-	log.Infof("Query the XaaS Controller for asaka service: %s", queryUrl)
-	returnStr, err := handleHttpGet(queryUrl)
-	if err != nil {
-		return nil, err
-	}
-	asakaServers, isDone, errorOfHandleResponse := m.handleHttpResponse(returnStr)
-
-	if errorOfHandleResponse != nil {
-		log.Info("Error of handle response: ", errorOfHandleResponse)
-		return nil, errorOfHandleResponse
-	} else if !isDone {
-		log.Info("Error of handle response: ", errorOfHandleResponse)
-		return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
-	} else if len(asakaServers) == 0 {
-		log.Infof("Cannot find enough vGPUs meet the requirment: %d.", vgpuNeeded)
-		return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
-	}
-
-	envMap := map[string]string{}
-	envMap["ASAKA_K8S"] = "1"
-	envMap["XaaS-Controller"] = xaasControllerUri
-	envMap["CONTROLLER_IP"] = xaasControllerUri
-	envMap["ASAKA_CONTROLLER_IP"] = xaasControllerUri
-
-	allocationId := asakaServers[0].AllocationId
-	if allocationId != "" {
-		log.Infof("Get the allocationId: %s", allocationId)
-		allocations := m.queryVGPUAllocations(allocationId)
-		envMap["DEV"] = allocations + ";ALLOCATION_ID=" + allocationId
-		m.confirmedVGPUAllocations(allocationId)
-		// if _, ok := releaseMap[pod.SelfLink]; !ok {
-		// 	var releaseData releaseInfo
-		// 	releaseData.allocationId = allocationId
-		// 	releaseData.allocationStr = allocations
-		// 	releaseMap[pod.SelfLink] = releaseData
-		// }
-	}
-	return envMap, nil
-}
-
-func (m *AsakaVgpuDevicePlugin) handleHttpResponse(returnStr string) ([]AsakaServer, bool, error) {
-	if returnStr == "null" {
-		return nil, false, errors.New("Not enough asaka vGPU left. Please wait")
-	}
-
-	var asakaServers []AsakaServer
-	err := json.Unmarshal([]byte(returnStr), &asakaServers)
-
-	if err != nil {
-		var asakaError AsakaError
-		err := json.Unmarshal([]byte(returnStr), &asakaError)
-		return nil, true, err
-	}
-
-	return asakaServers, true, nil
-}
-
-func (m *AsakaVgpuDevicePlugin) queryVGPUAllocations(allocationId string) string {
-	queryStr := fmt.Sprintf("http://%s/device/%s", xaasControllerUri, allocationId)
-	returnStr, err := handleHttpGet(queryStr)
-	if err != nil {
-		log.Info("Query allocation error: ", err)
-	}
-	return returnStr
-}
-
-func (m *AsakaVgpuDevicePlugin) confirmedVGPUAllocations(allocationId string) string {
-	url := fmt.Sprintf("http://%s/device/%s/allocate", xaasControllerUri, allocationId)
-	returnStr, err := handleHttpPut(url, "")
-
-	if err != nil {
-		log.Infof("Confirm allocation %s error: %s", allocationId, err)
-	}
-
-	return returnStr
 }

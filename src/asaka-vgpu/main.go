@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"syscall"
 
@@ -16,7 +15,7 @@ type releaseInfo struct {
 }
 
 var releaseMap map[string]releaseInfo
-var xaasControllerUri string
+var asakaControllerClient *AsakaControllerClient
 
 func initLogger() {
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -36,32 +35,26 @@ func initLogger() {
 	log.SetOutput(os.Stdout)
 }
 
-func initControllerUri() {
-	xaasControllerUri = os.Getenv("XAAS_CONTROLLER_URI")
+func initControllerClient() {
+	xaasControllerUri := os.Getenv("XAAS_CONTROLLER_URI")
 	if xaasControllerUri == "" {
 		log.Fatal("XAAS_CONTROLLER_URI can't be empty.")
 	}
 
-	queryStr := fmt.Sprintf("http://%s/test", xaasControllerUri)
-	if _, err := handleHttpGet(queryStr); err != nil {
+	log.Infof("XaaS Controller URI: %s", xaasControllerUri)
+	asakaControllerClient = NewAsakaControllerClient(xaasControllerUri)
+	if err := asakaControllerClient.TestConnection(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func init() {
 	initLogger()
-	initControllerUri()
+	initControllerClient()
 }
 
 func main() {
-	log.Infof("XaaS Controller URI: %s", xaasControllerUri)
 	releaseMap = make(map[string]releaseInfo)
-
-	log.Info("Fetching devices.")
-	if len(getDevices()) == 0 {
-		log.Info("No devices found. Waiting indefinitely.")
-		select {}
-	}
 
 	log.Info("Starting FS watcher.")
 	watcher, err := newFSWatcher(pluginapi.DevicePluginPath)
