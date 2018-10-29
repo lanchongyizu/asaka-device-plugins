@@ -138,15 +138,9 @@ func (m *AsakaVgpuDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 func (m *AsakaVgpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	responses := pluginapi.AllocateResponse{}
 	for _, req := range reqs.ContainerRequests {
-		envMap := map[string]string{}
-		vgpuNeeded := len(req.DevicesIDs)
-		log.Infof("Request %d VGPUs.", vgpuNeeded)
-		if vgpuNeeded > 0 {
-			var err error
-			envMap, err = asakaControllerClient.AllocateVGPU(vgpuNeeded)
-			if err != nil {
-				return nil, err
-			}
+		envMap, err := asakaControllerClient.AllocateVGPU(req.DevicesIDs)
+		if err != nil {
+			return nil, err
 		}
 		stringEnv, _ := json.Marshal(envMap)
 		log.Info("Set the env for the container: ", string(stringEnv))
@@ -158,6 +152,16 @@ func (m *AsakaVgpuDevicePlugin) Allocate(ctx context.Context, reqs *pluginapi.Al
 		responses.ContainerResponses = append(responses.ContainerResponses, &response)
 	}
 
+	return &responses, nil
+}
+
+func (m *AsakaVgpuDevicePlugin) Release(ctx context.Context, reqs *pluginapi.ReleaseRequest) (*pluginapi.ReleaseResponse, error) {
+	responses := pluginapi.ReleaseResponse{}
+	for _, req := range reqs.ContainerRequests {
+		if err := asakaControllerClient.ReleaseVGPU(req.DevicesIDs); err != nil {
+			return nil, err
+		}
+	}
 	return &responses, nil
 }
 

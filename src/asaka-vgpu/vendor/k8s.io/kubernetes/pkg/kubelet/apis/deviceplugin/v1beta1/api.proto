@@ -60,6 +60,8 @@ service DevicePlugin {
 	// of the steps to make the Device available in the container
 	rpc Allocate(AllocateRequest) returns (AllocateResponse) {}
 
+	rpc Release(ReleaseRequest) returns (ReleaseResponse) {}
+
         // PreStartContainer is called, if indicated by Device Plugin during registeration phase,
         // before each container start. Device plugin can run device specific operations
         // such as reseting the device before making devices available to the container
@@ -158,4 +160,14 @@ message DeviceSpec {
     // * w - allows container to write to the specified device.
     // * m - allows container to create device files that do not yet exist.
     string permissions = 3;
+}
+
+message ReleaseRequest {
+	repeated ContainerReleaseRequest container_requests = 1;
+}
+
+message ContainerReleaseRequest {
+	repeated string devicesIDs = 1;
+}
+message ReleaseResponse {
 }

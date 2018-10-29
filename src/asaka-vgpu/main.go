@@ -9,12 +9,6 @@ import (
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 )
 
-type releaseInfo struct {
-	allocationId  string
-	allocationStr string
-}
-
-var releaseMap map[string]releaseInfo
 var asakaControllerClient *AsakaControllerClient
 
 func initLogger() {
@@ -54,8 +48,6 @@ func init() {
 }
 
 func main() {
-	releaseMap = make(map[string]releaseInfo)
-
 	log.Info("Starting FS watcher.")
 	watcher, err := newFSWatcher(pluginapi.DevicePluginPath)
 	if err != nil {
