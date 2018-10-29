@@ -51,56 +51,83 @@ func handleHttpPut(url string, data string) (string, error) {
 	return string(body), nil
 }
 
+type releaseInfo struct {
+	allocationId  string
+	allocationStr string
+}
+
 type AsakaControllerClient struct {
 	xaasControllerUri string
+	releaseMap        map[int]releaseInfo
 }
 
 func NewAsakaControllerClient(controllerUri string) *AsakaControllerClient {
 	return &AsakaControllerClient{
 		xaasControllerUri: controllerUri,
+		releaseMap:        make(map[int]releaseInfo),
 	}
 }
 
-func (ac *AsakaControllerClient) AllocateVGPU(vgpuNeeded int) (map[string]string, error) {
-	queryUrl := fmt.Sprintf("http://%s/service/asaka_server?served_protocol=CUDA&vgpu_request=%d", ac.xaasControllerUri, vgpuNeeded)
-	log.Infof("Query the XaaS Controller for asaka service: %s", queryUrl)
-	returnStr, err := handleHttpGet(queryUrl)
-	if err != nil {
-		return nil, err
-	}
-	asakaServers, isDone, errorOfHandleResponse := ac.handleHttpResponse(returnStr)
+func (ac *AsakaControllerClient) AllocateVGPU(devs []string) (map[string]string, error) {
+	vgpuNeeded := len(devs)
+	log.Infof("Request %d VGPUs.", vgpuNeeded)
+	if vgpuNeeded > 0 {
+		queryUrl := fmt.Sprintf("http://%s/service/asaka_server?served_protocol=CUDA&vgpu_request=%d", ac.xaasControllerUri, vgpuNeeded)
+		log.Infof("Query the XaaS Controller for asaka service: %s", queryUrl)
+		returnStr, err := handleHttpGet(queryUrl)
+		if err != nil {
+			return nil, err
+		}
+		asakaServers, isDone, errorOfHandleResponse := ac.handleHttpResponse(returnStr)
 
-	if errorOfHandleResponse != nil {
-		log.Info("Error of handle response: ", errorOfHandleResponse)
-		return nil, errorOfHandleResponse
-	} else if !isDone {
-		log.Info("Error of handle response: ", errorOfHandleResponse)
-		return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
-	} else if len(asakaServers) == 0 {
-		log.Infof("Cannot find enough vGPUs meet the requirment: %d.", vgpuNeeded)
-		return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
+		if errorOfHandleResponse != nil {
+			log.Info("Error of handle response: ", errorOfHandleResponse)
+			return nil, errorOfHandleResponse
+		} else if !isDone {
+			log.Info("Error of handle response: ", errorOfHandleResponse)
+			return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
+		} else if len(asakaServers) == 0 {
+			log.Infof("Cannot find enough vGPUs meet the requirment: %d.", vgpuNeeded)
+			return nil, fmt.Errorf("Cannot finsih request GPU resource from XaaS Controller")
+		}
+
+		envMap := map[string]string{}
+		envMap["ASAKA_K8S"] = "1"
+		envMap["XaaS-Controller"] = ac.xaasControllerUri
+		envMap["CONTROLLER_IP"] = ac.xaasControllerUri
+		envMap["ASAKA_CONTROLLER_IP"] = ac.xaasControllerUri
+
+		allocationId := asakaServers[0].AllocationId
+		if allocationId != "" {
+			log.Infof("Get the allocationId: %s", allocationId)
+			allocations := ac.queryVGPUAllocations(allocationId)
+			envMap["DEV"] = allocations + ";ALLOCATION_ID=" + allocationId
+			ac.confirmedVGPUAllocations(allocationId)
+			key := StringsToHash(devs)
+			if _, ok := ac.releaseMap[key]; !ok {
+				var releaseData releaseInfo
+				releaseData.allocationId = allocationId
+				releaseData.allocationStr = allocations
+				ac.releaseMap[key] = releaseData
+			}
+		}
+		return envMap, nil
+	}
+	return nil, nil
+}
+
+func (ac *AsakaControllerClient) ReleaseVGPU(devs []string) error {
+	key := StringsToHash(devs)
+	if releaseData, ok := ac.releaseMap[key]; ok {
+		log.Infof("Release %s, %s", releaseData.allocationId, releaseData.allocationStr)
+		url := fmt.Sprintf("http://%s/device/%s/release", ac.xaasControllerUri, releaseData.allocationId)
+		if _, err := handleHttpPut(url, releaseData.allocationStr); err != nil {
+			return err
+		}
+		delete(ac.releaseMap, key)
 	}
 
-	envMap := map[string]string{}
-	envMap["ASAKA_K8S"] = "1"
-	envMap["XaaS-Controller"] = ac.xaasControllerUri
-	envMap["CONTROLLER_IP"] = ac.xaasControllerUri
-	envMap["ASAKA_CONTROLLER_IP"] = ac.xaasControllerUri
-
-	allocationId := asakaServers[0].AllocationId
-	if allocationId != "" {
-		log.Infof("Get the allocationId: %s", allocationId)
-		allocations := ac.queryVGPUAllocations(allocationId)
-		envMap["DEV"] = allocations + ";ALLOCATION_ID=" + allocationId
-		ac.confirmedVGPUAllocations(allocationId)
-		// if _, ok := releaseMap[pod.SelfLink]; !ok {
-		// 	var releaseData releaseInfo
-		// 	releaseData.allocationId = allocationId
-		// 	releaseData.allocationStr = allocations
-		// 	releaseMap[pod.SelfLink] = releaseData
-		// }
-	}
-	return envMap, nil
+	return nil
 }
 
 func (ac *AsakaControllerClient) handleHttpResponse(returnStr string) ([]AsakaServer, bool, error) {
