@@ -19,3 +19,37 @@ GOPATH=`pwd` make compile
 ```bash
 LOG_LEVEL=info XAAS_CONTROLLER_URI=127.0.0.1:9527 bin/asaka-vgpu
 ```
+
+## Test Results of Release Interface
+
+Release is added in the KillPod function of Kubelet, and the test results are as follows by `kubectl delete pod <pod_name>`.
+
+1. long run application
+
+Released once
+
+2. non long run application with exit 0
+
+| restart policy | release times |
+| :------------- | :-----------: |
+| Always         | 0             |
+| OnFailure      | 0             |
+| Never          | 0             |
+
+3. application with exit 1
+
+| restart policy | release times |
+| :------------- | :-----------: |
+| Always         | 1             |
+| OnFailure      | 1             |
+| Never          | 1             |
+
+4. container doesn't start
+
+image not found, and fail to pull image
+
+| restart policy | release times |
+| :------------- | :-----------: |
+| Always         | 0             |
+| OnFailure      | 1             |
+| Never          | 0             |
